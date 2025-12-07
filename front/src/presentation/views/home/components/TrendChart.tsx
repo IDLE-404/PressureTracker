@@ -1,10 +1,22 @@
-import type { MeasurementStatsPoint } from "@/domain/entities/measurement/MeasurementStats";
-import type { StatsRange } from "@/domain/entities/measurement/MeasurementStats";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Cell,
+} from "recharts";
+import type { MeasurementEntity } from "@/domain/entities/measurement/MeasurementEntity";
+import type { MeasurementStatsPoint, StatsRange } from "@/domain/entities/measurement/MeasurementStats";
 import styles from "../Home.module.css";
 
 interface Props {
   data: MeasurementStatsPoint[];
   range: StatsRange;
+  measurements?: MeasurementEntity[];
 }
 
 const formatBucketLabel = (range: StatsRange, iso: string) => {
@@ -25,116 +37,139 @@ const formatBucketLabel = (range: StatsRange, iso: string) => {
   });
 };
 
-const buildPath = (values: number[], width: number, height: number, maxValue: number) => {
-  if (!values.length) return "";
-  const stepX = values.length > 1 ? width / (values.length - 1) : width;
-  const safeMax = Math.max(maxValue, 1);
-
-  return values
-    .map((v, i) => {
-      const x = i * stepX;
-      const y = height - (v / safeMax) * height;
-      return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+const statusPalette: Record<
+  MeasurementEntity["status"],
+  { fill: string; stroke: string }
+> = {
+  normal: { fill: "#2E6B45", stroke: "#39D17A" },
+  prehypertension: { fill: "#284A63", stroke: "#5CA9D9" },
+  elevated: { fill: "#4A423C", stroke: "#D6B354" },
+  high: { fill: "#4A272A", stroke: "#D15B5B" },
+  danger: { fill: "#4A3B66", stroke: "#B38BFF" },
 };
 
-export const TrendChart = ({ data, range }: Props) => {
+const fallbackPalette = [
+  { fill: "#2E6B45", stroke: "#39D17A" },
+  { fill: "#284A63", stroke: "#5CA9D9" },
+  { fill: "#4A423C", stroke: "#D6B354" },
+  { fill: "#4A272A", stroke: "#D15B5B" },
+  { fill: "#4A3B66", stroke: "#B38BFF" },
+];
+
+export const TrendChart = ({ data, range, measurements }: Props) => {
   if (!data.length) {
     return <div className={styles.chartEmpty}>Недостаточно данных для графика</div>;
   }
 
-  const width = Math.max(480, (data.length - 1) * 110 + 120);
-  const height = 220;
+  const hasMeasurements = Boolean(measurements?.length);
 
-  const sysValues = data.map((d) => d.avgSystolic);
-  const diaValues = data.map((d) => d.avgDiastolic);
-  const maxValue = Math.max(...sysValues, ...diaValues, 1);
-
-  const systolicPath = buildPath(sysValues, width, height, maxValue * 1.05);
-  const diastolicPath = buildPath(diaValues, width, height, maxValue * 1.05);
-
-  const areaPath =
-    systolicPath &&
-    `${systolicPath} L ${width} ${height} L 0 ${height} Z`;
+  const chartData = hasMeasurements
+    ? [...(measurements ?? [])]
+        .sort(
+          (a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()
+        )
+        .map((m) => {
+          const colors = statusPalette[m.status];
+          return {
+            label: new Date(m.measuredAt).toLocaleString("ru-RU", {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            value: m.systolic,
+            diastolic: m.diastolic,
+            pulse: m.pulse,
+            status: m.status,
+            fill: colors.fill,
+            stroke: colors.stroke,
+            isMeasurement: true,
+          };
+        })
+    : [...data]
+        .sort(
+          (a, b) => new Date(a.bucket).getTime() - new Date(b.bucket).getTime()
+        )
+        .map((item, idx) => ({
+          label: formatBucketLabel(range, item.bucket),
+          value: Number(item.avgSystolic),
+          diastolic: Number(item.avgDiastolic),
+          isMeasurement: false,
+          fill: fallbackPalette[idx % fallbackPalette.length].fill,
+          stroke: fallbackPalette[idx % fallbackPalette.length].stroke,
+        }));
 
   return (
     <div className={styles.chartCard}>
       <div className={styles.chartHeader}>
         <div>
           <div className={styles.cardTitle}>График давления</div>
-          <div className={styles.cardSubtitle}>Средние значения по выбранному диапазону</div>
-        </div>
-        <div className={styles.chartLegend}>
-          <span className={styles.legendDot} style={{ background: "var(--accent)" }} /> Систолическое
-          <span className={styles.legendDot} style={{ background: "#7c91ff" }} /> Диастолическое
+          <div className={styles.cardSubtitle}>
+            Ступенчатые бар-сегменты + волнистая линия
+          </div>
         </div>
       </div>
 
       <div className={styles.chartScroll}>
-        <svg
-          className={styles.chart}
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label="График среднего давления"
-        >
-          <defs>
-            <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          {areaPath && (
-            <path d={areaPath} fill="url(#areaGradient)" stroke="none" vectorEffect="non-scaling-stroke" />
-          )}
-
-          {diastolicPath && (
-            <path
-              d={diastolicPath}
-              fill="none"
-              stroke="#7c91ff"
-              strokeWidth={3}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-
-          {systolicPath && (
-            <path
-              d={systolicPath}
-              fill="none"
-              stroke="var(--accent)"
-              strokeWidth={4}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-
-          {data.map((point, i) => {
-            const stepX = data.length > 1 ? width / (data.length - 1) : width;
-            const x = i * stepX;
-            const ySys = height - (point.avgSystolic / (maxValue * 1.05)) * height;
-            const yDia = height - (point.avgDiastolic / (maxValue * 1.05)) * height;
-
-            return (
-              <g key={point.bucket}>
-                <circle cx={x} cy={ySys} r={5} fill="var(--accent)" />
-                <circle cx={x} cy={yDia} r={4} fill="#7c91ff" />
-                <text
-                  x={x}
-                  y={height + 18}
-                  textAnchor="middle"
-                  className={styles.chartLabel}
-                >
-                  {formatBucketLabel(range, point.bucket)}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+        <div className={styles.chartFrame}>
+          <ResponsiveContainer width="100%" aspect={16 / 5}>
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 16, right: 16, left: 16, bottom: 24 }}
+            >
+              <CartesianGrid vertical={false} stroke="#2b323b" />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "#8fa1b7", fontSize: 11 }}
+                axisLine={{ stroke: "#2b323b" }}
+                tickLine={{ stroke: "#2b323b" }}
+                interval={0}
+              />
+              <YAxis
+                tick={{ fill: "#8fa1b7", fontSize: 11 }}
+                axisLine={{ stroke: "#2b323b" }}
+                tickLine={{ stroke: "#2b323b" }}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "#1f242b",
+                  border: "1px solid #2b323b",
+                  borderRadius: 8,
+                  color: "#e8edf3",
+                }}
+                labelStyle={{ color: "#e8edf3" }}
+                formatter={(val: number, _name: string, props) => {
+                  const payload = props?.payload as (typeof chartData)[number];
+                  if (payload?.isMeasurement) {
+                    return [
+                      `${val.toFixed(0)} / ${payload.diastolic} мм рт. ст.`,
+                      "Измерение",
+                    ];
+                  }
+                  return [`${val.toFixed(1)} мм рт. ст.`, "Среднее"];
+                }}
+              />
+              <Bar dataKey="value" barSize={28} radius={[2, 2, 2, 2]} strokeWidth={2}>
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.fill}
+                    stroke={entry.stroke}
+                  />
+                ))}
+              </Bar>
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#FFFFFF"
+                strokeWidth={3}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );

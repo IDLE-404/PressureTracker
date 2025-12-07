@@ -8,7 +8,6 @@ import {
 import type { MeasurementStatus } from "@/domain/entities/measurement/MeasurementEntity";
 import type { StatsRange } from "@/domain/entities/measurement/MeasurementStats";
 import { TrendChart } from "./components/TrendChart";
-import { StatusBarChart } from "./components/StatusBarChart";
 import styles from "./Home.module.css";
 
 const statusCopy: Record<
@@ -133,7 +132,7 @@ const Home = () => {
           <div>
             <div className={styles.cardTitle}>Статистика</div>
             <div className={styles.cardSubtitle}>
-              График средних значений + разбивка по статусам
+              Ступенчатый бар-график и плавная линия
             </div>
           </div>
           <div className={styles.statsControls}>
@@ -155,11 +154,11 @@ const Home = () => {
         {statsQuery.error && <div className={styles.error}>Не удалось загрузить статистику</div>}
 
         {statsQuery.data && (
-          <TrendChart data={statsQuery.data.data} range={statsRange} />
-        )}
-
-        {measurementsQuery.data && (
-          <StatusBarChart measurements={measurementsQuery.data} />
+          <TrendChart
+            data={statsQuery.data.data}
+            range={statsRange}
+            measurements={measurementsQuery.data}
+          />
         )}
 
         <div className={styles.statsGrid}>
