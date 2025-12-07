@@ -1,0 +1,11 @@
+.footer {
+  width: 100%;
+  padding: 18px 24px;
+  background: rgba(17, 26, 47, 0.85);
+  color: var(--text-dim);
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.2px;
+}
